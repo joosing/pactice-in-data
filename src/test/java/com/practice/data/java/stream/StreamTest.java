@@ -9,7 +9,12 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.function.BinaryOperator;
 import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.stream.Collector;
 
 import static java.util.stream.Collectors.*;
 
@@ -33,10 +38,16 @@ public class StreamTest {
     }
 
     @Test
-    void reduceToOtherObject() {
-        // reduce API의 accumulator와 combiner가 상태를 가지기 때문에 병렬 스트림을 사용할 수 없습니다.
+    void reduceThreadUnsafeInParallel() {
         final var result = sample.stream()
                 .reduce(new Statistics(0, 0), Statistics::accumulate, Statistics::combine);
+        System.out.println(result);
+    }
+
+    @Test
+    void reduceThreadSafeInParallel() {
+        final var result = sample.stream()
+                        .collect(new CustomSumCollector());
         System.out.println(result);
     }
 
@@ -55,11 +66,43 @@ public class StreamTest {
         System.out.println(result);
     }
 
+    static class CustomSumCollector implements Collector<Person, Statistics, Statistics> {
+        @Override
+        public Supplier<Statistics> supplier() {
+            return Statistics::new;
+        }
+
+        @Override
+        public BiConsumer<Statistics, Person> accumulator() {
+            return Statistics::accumulate;
+        }
+
+        @Override
+        public BinaryOperator<Statistics> combiner() {
+            return Statistics::combine;
+        }
+
+        @Override
+        public Function<Statistics, Statistics> finisher() {
+            return Function.identity();
+        }
+
+        @Override
+        public Set<Characteristics> characteristics() {
+            return Set.of(Characteristics.IDENTITY_FINISH, Characteristics.UNORDERED, Characteristics.CONCURRENT);
+        }
+    }
+
     @Getter
     @ToString
     static class Statistics {
         int sumAge;
         int sumSalary;
+
+        Statistics() {
+            sumAge = 0;
+            sumSalary = 0;
+        }
 
         Statistics(int sumAge, int sumSalary) {
             this.sumAge = sumAge;
